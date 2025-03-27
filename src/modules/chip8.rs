@@ -124,4 +124,150 @@ impl Chip8 {
             self.pc += 2;
         }
     }
+
+    // 4xkk: SNE Vx, byte
+    pub fn op_4xkk(&mut self) {
+        let vx = ((self.opcode & 0x0FFF) >> 8) as usize;
+        let byte = (self.opcode & 0x0FFF) as u8;
+
+        if self.registers[vx] != byte {
+            self.pc += 2;
+        }
+    }
+
+    // 5xy0: SE Vx, Vy
+    pub fn op_5xy0(&mut self) {
+        let vx = ((self.opcode & 0x0FFF) >> 8) as usize;
+        let vy = ((self.opcode & 0x0FFF) >> 4) as usize;
+
+        if self.registers[vx] == self.registers[vy] {
+            self.pc += 2;
+        }
+    }
+
+    // 6xkk: LD Vx, byte
+    pub fn op_6xkk(&mut self) {
+        let vx = ((self.opcode & 0x0FFF) >> 8) as usize;
+        let byte = (self.opcode & 0x0FFF) as u8;
+
+        self.registers[vx] = byte;
+    }
+
+    // 7xkk: ADD Vx, byte
+    pub fn op_7xkk(&mut self) {
+        let vx = ((self.opcode & 0x0FFF) >> 8) as usize;
+        let vy = ((self.opcode & 0x0FFF) >> 4) as usize;
+
+        self.registers[vx] = self.registers[vy];
+    }
+
+    // 8xy1: OR Vx, Vy
+    pub fn op_8xy1(&mut self) {
+        let vx = ((self.opcode & 0x0FFF) >> 8) as usize;
+        let vy = ((self.opcode & 0x0FFF) >> 4) as usize;
+
+        let _ = self.registers[vx] != self.registers[vy];
+    }
+
+    // 8xy2: AND Vx, Vy
+    pub fn op_8xy2(&mut self) {
+        let vx = ((self.opcode & 0x0FFF) >> 8) as usize;
+        let vy = ((self.opcode & 0x0FFF) >> 4) as usize;
+
+        self.registers[vx] &= self.registers[vy];
+    }
+
+    // 8xy3: XOR Vx, Vy
+    pub fn op_8xy3(&mut self) {
+        let vx = ((self.opcode & 0x0FFF) >> 8) as usize;
+        let vy = ((self.opcode & 0x0FFF) >> 4) as usize;
+
+        self.registers[vx] ^= self.registers[vy];
+    }
+
+    // 8xy4: ADD Vx, Vy
+    pub fn op_8xy4(&mut self) {
+        let vx = ((self.opcode & 0x0FFF) >> 8) as usize;
+        let vy = ((self.opcode & 0x0FFF) >> 4) as usize;
+
+        let sum = self.registers[vx] as u16 + self.registers[vy] as u16;
+
+        if sum > 255 {
+            self.registers[0xF] = 1;
+        } else {
+            self.registers[0xF] = 0;
+        }
+
+        self.registers[vx] = (sum & 0xFF) as u8;
+    }
+
+    // 8xy5: SUB Vx, Vy
+    pub fn op_8xy5(&mut self) {
+        let vx = ((self.opcode & 0x0FFF) >> 8) as usize;
+        let vy = ((self.opcode & 0x0FFF) >> 4) as usize;
+
+        if self.registers[vx] > self.registers[vy] {
+            self.registers[0xF] = 1;
+        } else {
+            self.registers[0xF] = 0;
+        }
+
+        self.registers[vx] -= self.registers[vy];
+    }
+
+    // 8xy6: SHR Vx
+    pub fn op_8xy6(&mut self) {
+        let vx = ((self.opcode & 0x0F00) >> 8) as usize;
+
+        self.registers[0xF] = self.registers[vx] & 0x1;
+
+        self.registers[vx] >>= 1;
+    }
+
+    // 8xy7: SUBN Vx, Vy
+    pub fn op_8xy7(&mut self) {
+        let vx = ((self.opcode & 0x0F00) >> 8) as usize;
+        let vy = ((self.opcode & 0x00F0) >> 4) as usize;
+
+        if self.registers[vx] > self.registers[vy] {
+            self.registers[0xF] = 1;
+        } else {
+            self.registers[0xF] = 0;
+        }
+
+        self.registers[vx] = self.registers[vy] - self.registers[vx];
+    }
+
+    // 8xyE: SHL Vx {, Vy}
+    pub fn op_8xye(&mut self) {
+        let vx = ((self.opcode & 0x0F00) >> 7) as usize;
+
+        self.registers[0xF] = (self.registers[vx] & 0x80) >> 7;
+
+        self.registers[vx] <<= 1;
+    }
+
+    // 9xy0: SNE Vx, Vy
+    pub fn op_9xy0(&mut self) {
+        let vx = ((self.opcode & 0x0FF0) >> 8) as usize;
+        let vy = ((self.opcode & 0x0FF0) >> 4) as usize;
+
+        if self.registers[vx] != self.registers[vy] {
+            self.pc += 2;
+        }
+    }
+
+    // Annn: LD I, addr
+    pub fn op_annn(&mut self) {
+        let address = self.opcode & 0x0FFF;
+
+        self.index = address;
+    }
+
+    // Bnnn: JP V0 addr
+    pub fn op_bnnn(&mut self) {
+        let address = self.opcode & 0x0FFF;
+
+        self.pc = self.registers[0] as u16 + address;
+    }
 }
