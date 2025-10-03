@@ -1,4 +1,7 @@
+use core::panic;
 use std::{fs, io::Read};
+
+use rand::Fill;
 
 const MEMORY_SIZE: u16 = 4096;
 const VIDEO_WIDTH: u16 = 64;
@@ -92,27 +95,135 @@ impl Chip8 {
         println!("Fetched opcode: {:#X}, nnn={:#X}, kk={:#X}, x={}, y={}, n={}", self.opcode, nnn, kk, x, y, n);
         match self.opcode & 0xF000 {
             0x0000 => match self.opcode & 0x00FF { 
-                0x00E0 => { /* CLS */}
-                0x00EE => { /* RET */}
+                0x00E0 => self.cls(),
+                0x00EE => self.ret(),
                 _ => eprintln!("Unknown 0x0NNN opcode: {:#X}", self.opcode),
             },
-            0x1000 => { /* JMP addr */}
-            0x2000 => { /* CALL addr */}
-            0x3000 => { /* SE Vx, byte */}
-            0x4000 => { /* SNE Vx, byte */}
-            0x5000 => { /* SE Vx, Vy */}
-            0x6000 => { /* LD Vx, byte */}
-            0x7000 => { /* ADD Vx, byte */}
+            0x1000 => { // JMP addr
+                let address: u16 = self.opcode & 0x0FFF;
+                self.pc = address;
+
+            },
+            0x2000 => { // CALL addr
+                let address: u16 = self.opcode & 0x0FFF;
+                if self.sp as usize >= self.stack.len() {
+                    panic!("Stack overflow");
+                }
+                self.stack[self.sp as usize] = self.pc + 2; // to save return address cuz CALL needs to save
+                self.sp += 1;
+                self.pc = address;
+            },
+            0x3000 => { /* SE Vx, byte */
+                let vx: u8 = ((self.opcode & 0x0F00) >> 8) as u8;
+                let byte: u8 = (self.opcode & 0x00FF) as u8;
+
+                if self.registers[vx as usize] == byte {
+                    self.pc += 2;
+                } 
+            },
+            0x4000 => { /* SNE Vx, byte */
+                let vx: u8 = ((self.opcode & 0x0F00) >> 8) as u8;
+                let byte: u8 = (self.opcode & 0x00FF) as u8;
+
+                if self.registers[vx as usize] != byte {
+                    self.pc += 2;
+                }
+            },
+            0x5000 => { /* SE Vx, Vy */
+                let vx: u8 = ((self.opcode & 0x0F00) >> 8) as u8;
+                let vy: u8 = ((self.opcode & 0x00F0) >> 4) as u8;
+
+                if self.registers[vx as usize] == self.registers[vy as usize] {
+                    self.pc += 2;
+                }
+            },
+            0x6000 => { /* LD Vx, byte */
+                let vx: u8 = ((self.opcode & 0x0F00) >> 8) as u8;
+                let byte: u8 = (self.opcode & 0x00FF) as u8;
+
+                self.registers[vx as usize] = byte;
+            },
+            0x7000 => { /* ADD Vx, byte */
+                let vx: u8 = ((self.opcode & 0x0F00) >> 8) as u8;
+                let byte: u8 = (self.opcode & 0x00FF) as u8;
+
+                self.registers[vx as usize] = self.registers[vx as usize].wrapping_add(byte);
+            },
             0x8000 => match self.opcode & 0x000F {
-                0x0000 => { /* LD Vx, Vy */}
-                0x0001 => { /* OR Vx, Vy */}
-                0x0002 => { /* AND Vx, Vy */}
-                0x0003 => { /* XOR Vx, Vy */}
-                0x0004 => { /* ADD Vx, Vy */}
-                0x0005 => { /* SUB Vx, Vy */}
-                0x0006 => { /* SHR Vx */}
-                0x0007 => { /* SUBN Vx, Vy */}
-                0x000E => { /* SHL Vx */}
+                0x0000 => { /* LD Vx, Vy */
+                    let vx: u8 = ((self.opcode & 0x0F00) >> 8) as u8;
+                    let vy: u8 = ((self.opcode & 0x00F0) >> 4) as u8;
+
+                    self.registers[vx as usize] = self.registers[vy as usize];
+                }
+                0x0001 => { /* OR Vx, Vy */
+                    let vx: u8 = ((self.opcode & 0x0F00) >> 8) as u8;
+                    let vy: u8 = ((self.opcode & 0x00F0) >> 4) as u8;
+
+                    self.registers[vx as usize] != self.registers[vy as usize];
+                }
+                0x0002 => { /* AND Vx, Vy */
+                    let vx: u8 = ((self.opcode & 0x0F00) >> 8) as u8;
+                    let vy: u8 = ((self.opcode & 0x00F0) >> 4) as u8;
+
+                    self.registers[vx as usize] &= self.registers[vy as usize];
+                }
+                0x0003 => { /* XOR Vx, Vy */
+                    let vx: u8 = ((self.opcode & 0x0F00) >> 8) as u8;
+                    let vy: u8 = ((self.opcode & 0x00F0) >> 4) as u8;
+
+                    self.registers[vx as usize] ^= self.registers[vy as usize];
+                }
+                0x0004 => { /* ADD Vx, Vy */
+                    let vx: u8 = ((self.opcode & 0x0F00) >> 8) as u8;
+                    let vy: u8 = ((self.opcode & 0x00F0) >> 4) as u8;
+
+                    let sum: u16 = (self.registers[vx as usize] + self.registers[vy as usize]) as u16;
+
+                    if sum > 255 {
+                        self.registers[0xF] = 1;
+                    } else {
+                        self.registers[0xF] = 0;
+                    }
+
+                    self.registers[vx as usize] = (sum & 0xFF) as u8;
+                }
+                0x0005 => { /* SUB Vx, Vy */
+                    let vx: u8 = ((self.opcode & 0x0F00) >> 8) as u8;
+                    let vy: u8 = ((self.opcode & 0x00F0) >> 4) as u8;
+
+                    if self.registers[vx as usize] > self.registers[vy as usize] {
+                        self.registers[0xF] = 1;
+                    } else {
+                        self.registers[0xF] = 0;
+                    }
+
+                    self.registers[vx as usize] -= self.registers[vy as usize];
+                }
+                0x0006 => { /* SHR Vx */
+                    let vx: u8 = ((self.opcode & 0x0F00) >> 8) as u8;
+
+                    self.registers[0xF] = self.registers[vx as usize] & 0x1;
+                    self.registers[vx as usize] >>= 1;
+                }
+                0x0007 => { /* SUBN Vx, Vy */
+                    let vx: u8 = ((self.opcode & 0x0F00) >> 8) as u8;
+                    let vy: u8 = ((self.opcode & 0x00F0) >> 4) as u8;
+
+                    if self.registers[vy as usize] > self.registers[vx as usize] {
+                        self.registers[0xF] = 1;
+                    } else {
+                        self.registers[0xF] = 0;
+                    }
+
+                    self.registers[vx as usize] = self.registers[vy as usize] - self.registers[vx as usize];
+                }
+                0x000E => { /* SHL Vx */
+                    let vx: u8 = ((self.opcode & 0x0F00) >> 8) as u8;
+
+                    self.registers[0xF] = (self.registers[vx as usize] & 0x80) >> 7;
+                    self.registers[vx as usize] <<= 1;
+                }
                 _ => eprintln!("Unknown opcode: {:04X}", self.opcode)
             },
             0x9000 => { /* SNE Vx, Vy */ }
@@ -142,5 +253,20 @@ impl Chip8 {
 
         self.pc += 2;
 
+    }
+
+    fn cls(&mut self) {
+        for pixel in self.video.iter_mut() {
+            *pixel = 0;
+        }
+    }
+
+    fn ret(&mut self) {
+        if self.sp > 0 {
+            self.sp -= 1;
+            self.pc = self.stack[self.sp as usize];
+        } else {
+            panic!("Stackoverflow on RET")
+        }
     }
 }
